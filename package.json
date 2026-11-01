@@ -1,0 +1,26 @@
+{
+  "name": "dsh-status-tray",
+  "version": "1.0.0",
+  "description": "Windows system-tray status light for DeepSeek Harness (DSH): see at a glance whether DSH is working, waiting for approval, idle, or offline.",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "build": "powershell -ExecutionPolicy Bypass -File build.ps1",
+    "agent:once": "node src/status-agent.mjs --once",
+    "agent:once:account": "node src/status-agent.mjs --once --account"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "windows",
+    "tray",
+    "system-tray",
+    "winforms",
+    "status-monitor"
+  ]
+}

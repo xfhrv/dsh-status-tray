@@ -1,0 +1,31 @@
+# ---- 构建产物（build.ps1 生成）----
+bin/
+obj/
+*.exe
+*.pdb
+*.dll
+
+# ---- Node ----
+node_modules/
+npm-debug.log*
+*.tsbuildinfo
+
+# ---- 运行时文件 ----
+# 正常运行时写在 %LOCALAPPDATA%\DSHStatusTray\；若手动复制到仓库内也一并忽略。
+status.json
+config.json
+agent.log
+tray.log
+*.log
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 临时文件 ----
+*.tmp
+tmp/
