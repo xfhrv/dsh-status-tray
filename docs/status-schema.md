@@ -1,6 +1,6 @@
 # DSH 状态托盘 — 实现契约（v1）
 
-> 本文档描述 v1 版本的设计与实现契约，是后续版本的基础；v2–v5 以增量方式叠加（见下方增量说明），当前最新行为以 v5 为准。文档索引见 [README.md](README.md)。
+> 本文档描述 v1 版本的设计与实现契约，是后续版本的基础；v2–v6 以增量方式叠加（见下方增量说明），当前最新行为以 v6 为准。文档索引见 [README.md](README.md)。
 >
 > **v2 增量**：status.json 的 `version` 已升为 2，新增 `alerts.completion` / `alerts.attention` 通知事件、config 的通知/提示音键，以及 `--test-notify` 调试参数 —— 详见 [alerts-spec.md](alerts-spec.md)。本文件其余内容（数据源、颜色、菜单、进程模型）继续有效。
 >
@@ -9,6 +9,8 @@
 > **v4 增量**：status.json 的 `version` 已升为 4，新增 `workingSessions`（全部工作中的主会话）；working 状态且主会话 ≥2 时 `tooltip` 改为逐行显示全部会话标题（≤60 字符预算，超出省略）—— 详见 [working-sessions-spec.md](working-sessions-spec.md)。
 >
 > **v5 增量**：`version` 升为 5，状态模型精简为 4 态（`approval`/`working`/`idle`/`offline`），绿色=空闲/DSH 正常运行、灰色=DSH 未运行；取消 `restricted` 状态与 `darkgray` 颜色；右键菜单去掉状态行/权限行 —— 详见 [state-model-v5.md](state-model-v5.md)。
+>
+> **v6 增量**：右键菜单扩展为「打开控制台 / 打开网页版 DeepSeek / 查看 DS 服务器状态 / 充值余额 / 设置全局快捷键… / 退出」，新增全局快捷键、鼠标左键单击打开控制台、config 的 `webChatUrl` / `statusUrl` / `hotkey` 以及 `--open-web` / `--open-status` / `--open-hotkey-settings` / `--hotkey` 调试参数；`status.json` 结构与 `version` 不变（仍为 5）—— 详见 [menu-hotkey-v6.md](menu-hotkey-v6.md)。
 
 > 本文件定义状态引擎（Node）与托盘 UI（C#）之间的**接口契约**。任何实现不得单方面改动本契约；需要变更时请先更新本文档，并同步修改两端实现。
 > 下文中的相对路径均相对于本仓库根目录。
@@ -49,7 +51,7 @@ Windows 任务栏托盘常驻小工具，实时反映**本机 DSH**（DeepSeek H
   src/status-core.mjs        # 纯函数：computeStatus() 等（可单测）
   test/status.test.mjs       # Node 单测（node --test）
   bin/DSHStatusTray.exe      # 构建产物（build.ps1 生成，不手写）
-  docs/README.md             # 文档索引（v1–v5）
+  docs/README.md             # 文档索引（v1–v6）
   docs/status-schema.md      # 本文件
 ```
 

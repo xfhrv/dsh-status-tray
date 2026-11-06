@@ -1,6 +1,6 @@
 # DSH 状态托盘 — 通知与提示音增强契约（v2）
 
-> 本文档描述 v2 版本的通知与提示音契约，是 [status-schema.md](status-schema.md) v1 契约的**增量补充**，两者一起生效；冲突处以本文件为准。v3–v5 以增量方式继续叠加，当前最新行为以 v5 为准；文档索引见 [README.md](README.md)。
+> 本文档描述 v2 版本的通知与提示音契约，是 [status-schema.md](status-schema.md) v1 契约的**增量补充**，两者一起生效；冲突处以本文件为准。v3–v6 以增量方式继续叠加，当前最新行为以 v6 为准（v6 见 [menu-hotkey-v6.md](menu-hotkey-v6.md)）；文档索引见 [README.md](README.md)。
 > 使用场景：① 任务完成 → 托盘小气泡"任务完成"；② 需要用户审批 → 托盘小气泡提示审批；③ 以上两种都播放提示音（默认使用系统提示音；也可在 `config.json` 中用 `soundFile` 指定自定义 wav）。
 
 ## 1. 组件职责

@@ -33,15 +33,20 @@
 - **多会话悬停提示**：鼠标移上去，逐个列出所有正在工作的主会话标题（自动适配 Windows 托盘提示 63 字符上限）。
 - **桌面通知 + 提示音**：任务完成、有操作需要审批时弹 Windows 通知气泡；默认用系统提示音，也可指定自己的 `.wav`。
 - **充值余额菜单**：右键直接显示 DeepSeek 账户充值余额，点击打开官方充值页。
+- **快捷入口 + 全局快捷键**：右键一键打开网页版 DeepSeek / DS 服务器状态；可录制系统全局热键，效果等同左键单击托盘图标（打开 DSH 控制台）。
 - **零第三方依赖**：托盘用 .NET Framework 4.8 + C# WinForms，状态引擎是纯 Node 脚本，不装任何 npm 包。
 - **开机自启可选**：一条命令安装 / 卸载，无需管理员权限。
 - **隐私友好**：不联网上报、不写 DSH 数据；账户 token 只在内存里用一次。
 
 ## 界面
 
-托盘右键菜单（只保留操作项）：
+托盘右键菜单：
 
 ![右键菜单](docs/tray-menu.png)
+
+菜单 →「设置全局快捷键…」录制系统热键（效果等同左键单击托盘图标）：
+
+![设置全局快捷键](docs/hotkey-settings.png)
 
 多个主会话同时工作时，悬停提示逐行显示：
 
@@ -92,10 +97,15 @@ powershell -ExecutionPolicy Bypass -File install-autostart.ps1 -Remove
 
 ### 4. 使用
 
-- 看圆点颜色判断状态；
-- 鼠标悬停看具体在跑哪个会话；
-- 右键菜单：**打开控制台**（打开 DSH Web 界面）/ **充值余额：¥xx.xx** / **退出**；
-- 双击圆点 = 打开控制台。
+- 看圆点颜色判断状态；鼠标悬停看具体在跑哪个会话。
+- 右键菜单：
+  - **打开控制台**：打开 DSH Web 界面（默认 `http://127.0.0.1:3080`）
+  - **打开网页版 DeepSeek**：打开 `https://chat.deepseek.com/`
+  - **查看 DS 服务器状态**：打开 `https://status.deepseek.com/`
+  - **充值余额：¥xx.xx**：显示账户充值余额，点击打开官方充值页
+  - **设置全局快捷键…**：录制 / 修改系统全局热键（功能 = 打开控制台）
+  - **退出**
+- **左键单击圆点 = 打开控制台**（与全局快捷键相同）；双击也只打开一次（内置 0.6 秒去抖，不会开两个标签页）。
 
 ## 配置
 
@@ -116,7 +126,10 @@ powershell -ExecutionPolicy Bypass -File install-autostart.ps1 -Remove
   "playSound": true,
   "soundFile": "",
   "showBalance": true,
-  "topUpUrl": "https://platform.deepseek.com/top_up"
+  "topUpUrl": "https://platform.deepseek.com/top_up",
+  "webChatUrl": "https://chat.deepseek.com/",
+  "statusUrl": "https://status.deepseek.com/",
+  "hotkey": ""
 }
 ```
 
@@ -130,6 +143,8 @@ powershell -ExecutionPolicy Bypass -File install-autostart.ps1 -Remove
 | `soundFile` | 自定义提示音 wav：留空 = 系统提示音；支持绝对路径或相对 exe 目录的路径；文件不存在时回退系统提示音 |
 | `showBalance` | 是否显示「充值余额」菜单项并启用余额查询 |
 | `topUpUrl` | 点击余额项打开的充值页地址 |
+| `webChatUrl` / `statusUrl` | 「打开网页版 DeepSeek」/「查看 DS 服务器状态」打开的地址 |
+| `hotkey` | 全局快捷键（如 `Ctrl+Alt+F9`；空字符串 = 未设置）。由「设置全局快捷键…」窗口自动写入，也可手改后重启生效 |
 
 ## 工作原理
 
@@ -177,6 +192,16 @@ bin\DSHStatusTray.exe --render-icons %TEMP%\dsh-icons
 bin\DSHStatusTray.exe --open-console
 bin\DSHStatusTray.exe --open-balance
 
+# 只执行「打开网页版 DeepSeek」/「打开 DS 服务器状态」后退出
+bin\DSHStatusTray.exe --open-web
+bin\DSHStatusTray.exe --open-status
+
+# 直接打开全局快捷键设置窗口（不启动托盘 / 引擎，验收用）
+bin\DSHStatusTray.exe --open-hotkey-settings
+
+# 本次运行临时注册一个全局热键（不写配置，测试用）
+bin\DSHStatusTray.exe --hotkey "Ctrl+Alt+F9"
+
 # 手动触发通知（真实弹气泡 + 播放提示音，5 秒后自动退出）
 bin\DSHStatusTray.exe --test-notify completion
 bin\DSHStatusTray.exe --test-notify approval
@@ -191,6 +216,8 @@ bin\DSHStatusTray.exe --test-notify approval
 - **看不到气泡？** 检查 Windows「通知」设置是否允许 `DSHStatusTray.exe`，以及是否开了勿扰 / 专注助手。气泡被系统屏蔽时，变色与提示音仍然生效。
 - **任务完成没提示？** 完成通知只对**主会话**的轮次结束触发（被委派的子会话不打扰你），且托盘需在运行中。可用 `--test-notify completion` 自测。
 - **余额显示「未登录」/「登录已过期」？** 说明本机 DSH 凭证缺失或失效：在 DSH 里重新登录，最多 10 分钟内自动恢复（重启托盘可立即刷新）。余额查询失败不影响状态灯与通知。
+- **左键单击没反应？** 左键单击 = 打开控制台（与全局快捷键相同）。若仍无反应，看 `%LOCALAPPDATA%\DSHStatusTray\tray.log` 是否有「托盘左键单击」记录。
+- **全局快捷键没生效 / 冲突？** 打开「设置全局快捷键…」，状态行会提示是否注册失败（可能被其他程序占用）；换一个组合（如 `Ctrl+Alt+F8`）再保存即可。录制时至少按一个修饰键 + 一个普通键，设置成功后重启托盘仍会保留。
 - **会拖慢 DSH 吗？** 不会：只读少量文件、增量解析、空闲时每 500ms 的开销在毫秒级，且不写 DSH 的任何数据。
 - **怎么完全退出？** 右键 →「退出」。建议用菜单退出；若在任务管理器里强制结束，内部 node 子进程可能残留（不影响 DSH，下次启动会自动复用 / 接管）。
 
@@ -206,7 +233,7 @@ dsh-status-tray/
 ├─ test/
 │  └─ status.test.mjs           # node --test 单元测试
 ├─ dev/                         # 开发辅助脚本（基准、体检、降级验证、文档配图生成）
-├─ docs/                        # 设计契约（v1–v5）与界面示意图
+├─ docs/                        # 设计契约（v1–v6）与界面示意图
 ├─ build.ps1                    # 一键编译（系统自带 csc.exe）
 ├─ install-autostart.ps1        # 开机自启安装 / 卸载
 └─ package.json                 # npm test / build 快捷入口
@@ -237,7 +264,8 @@ npm run build     # 等价于 powershell -ExecutionPolicy Bypass -File build.ps1
 | v2 [alerts-spec.md](docs/alerts-spec.md) | 任务完成 / 审批通知与提示音 |
 | v3 [account-balance-spec.md](docs/account-balance-spec.md) | 充值余额菜单 |
 | v4 [working-sessions-spec.md](docs/working-sessions-spec.md) | 多会话悬停提示 |
-| v5 [state-model-v5.md](docs/state-model-v5.md) | 当前四态状态模型与菜单精简 |
+| v5 [state-model-v5.md](docs/state-model-v5.md) | 四态状态模型与菜单精简 |
+| v6 [menu-hotkey-v6.md](docs/menu-hotkey-v6.md) | 网页版 / 状态页快捷入口、全局快捷键、左键单击打开控制台 |
 
 ## 已知限制与取舍
 
@@ -247,6 +275,7 @@ npm run build     # 等价于 powershell -ExecutionPolicy Bypass -File build.ps1
 - 同一时刻多条完成 / 审批事件只提示最新一条（两次完成间隔小于采样周期时可能合并）。
 - Windows 托盘提示有 **63 字符**硬上限，本工具按 60 字符预算排布；会话太多 / 标题太长时会省略并显示 `…等 N 个会话`。
 - 余额查询依赖本机 DSH 凭证与网络，结果最多缓存约 10 分钟；失败只影响余额显示。
+- 全局快捷键是系统级注册：可能被其它程序的同名热键占用（设置窗口会提示注册失败），在个别全屏游戏 / 远程桌面场景下也可能不生效（Windows 系统限制）。
 
 ## 许可证
 
@@ -263,7 +292,7 @@ npm run build     # 等价于 powershell -ExecutionPolicy Bypass -File build.ps1
 - 🟢 **idle** — DSH is running but has nothing to do
 - ⚪ **offline** — DSH's local web service is not reachable
 
-It also provides multi-session hover tooltips, completion/approval toast notifications with sound, and an optional account-balance menu item. Zero third-party dependencies: the tray is C# WinForms on .NET Framework 4.8, the status engine is a plain Node script.
+It also provides multi-session hover tooltips, completion/approval toast notifications with sound, an optional account-balance menu item, quick links to the DeepSeek web app and status page, and a configurable system-wide hotkey that opens the local DSH console (same as left-clicking the tray dot). Zero third-party dependencies: the tray is C# WinForms on .NET Framework 4.8, the status engine is a plain Node script.
 
 Build with `powershell -ExecutionPolicy Bypass -File build.ps1`, then run `bin\DSHStatusTray.exe`. Requires Windows 10/11 and Node.js (already required by DSH). See **[docs/README.md](docs/README.md)** for the design contracts.
 

@@ -10,7 +10,8 @@
 
 生成物（open-source/dsh-status-tray/docs/）：
     status-lights.png        636x216  四色圆点 + 中文状态标签
-    tray-menu.png            660x330  Windows 11 风格右键菜单（打开控制台 / 充值余额 / 退出）
+    tray-menu.png            660x420  Windows 11 风格右键菜单（v6 八项：控制台 / 网页版 / 状态页 / 余额 / 设置快捷键 / 退出）
+    hotkey-settings.png      470x340  「设置全局快捷键」窗口 mockup（捕获框 / 状态行 / 三个按钮）
     tooltip-multi-session.png 715x248 托盘悬停提示（两个工作中的会话）+ 中性任务栏
     notify-completion.png    760x300  任务完成通知气泡
     notify-approval.png      760x300  需要审批通知气泡
@@ -339,20 +340,34 @@ def render_status_lights() -> None:
 # ---------------------------------------------------------------------------
 
 def render_tray_menu() -> None:
-    W, H = 660, 330
+    """v6 菜单：6 个操作项 + 2 条分隔线（共 8 行），Win11 风格圆角面板。"""
+    menu_rows = [
+        ("打开控制台", False),
+        ("打开网页版 DeepSeek", False),
+        ("查看 DS 服务器状态", False),
+        ("充值余额：¥12.34", False),
+        ("", True),  # 分隔线
+        ("设置全局快捷键…", False),
+        ("", True),  # 分隔线
+        ("退出", False),
+    ]
+    W, H = 660, 420
     cv = Canvas(W, H)
     cv.gradient_bg("#F2F3F5", "#FBFBFC")
 
-    items = ["打开控制台", "充值余额：¥12.34", "退出"]
     item_font = ui_font(23)
-    text_w = max(cv.text_len(t, item_font) for t in items)
+    text_items = [label for label, is_sep in menu_rows if not is_sep]
+    text_w = max(cv.text_len(t, item_font) for t in text_items)
 
     pad_x = 22.0
     pad_top = 11.0
     item_h = 50.0
     sep_block = 13.0  # 4px 上边距 + 1px 分隔线 + 8px 下边距
-    panel_w = max(240.0, text_w + pad_x * 2 + 26.0)
-    panel_h = pad_top * 2 + item_h * 3 + sep_block
+    panel_w = max(280.0, text_w + pad_x * 2 + 26.0)
+    content_h = pad_top * 2
+    for _, is_sep in menu_rows:
+        content_h += sep_block if is_sep else item_h
+    panel_h = content_h
     px = (W - panel_w) / 2
     py = (H - panel_h) / 2
 
@@ -365,19 +380,78 @@ def render_tray_menu() -> None:
     cv.line(((px + 11, py + 1.0), (px + panel_w - 11, py + 1.0)),
             fill=(255, 255, 255, 190), width=1)
 
-    # 三个菜单项，第二项后加分隔线
-    centers_y = [
-        py + pad_top + item_h * 0.5,
-        py + pad_top + item_h * 1.5,
-        py + pad_top + item_h * 2.5 + sep_block,
-    ]
-    for label, cy in zip(items, centers_y):
-        cv.text((px + pad_x, cy), label, item_font, INK, anchor="lm")
-
-    sep_y = py + pad_top + item_h * 2 + 4.5
-    cv.line(((px + 12, sep_y), (px + panel_w - 12, sep_y)), fill="#E3E4E6", width=1)
+    # 逐行绘制菜单项与分隔线
+    y = py + pad_top
+    for label, is_sep in menu_rows:
+        if is_sep:
+            sep_y = y + 4.5
+            cv.line(((px + 12, sep_y), (px + panel_w - 12, sep_y)),
+                    fill="#E3E4E6", width=1)
+            y += sep_block
+        else:
+            cv.text((px + pad_x, y + item_h * 0.5), label, item_font, INK, anchor="lm")
+            y += item_h
 
     cv.save(DOCS / "tray-menu.png")
+
+
+# ---------------------------------------------------------------------------
+# 2b) hotkey-settings.png —— 「设置全局快捷键」窗口 mockup
+# ---------------------------------------------------------------------------
+
+def render_hotkey_settings() -> None:
+    """Win11 浅色小窗口 mockup：标题栏 / 说明 / 捕获框 / 状态行 / 三个按钮。"""
+    win_w, win_h = 426.0, 289.0
+    W, H = 470, 340
+    cv = Canvas(W, H)
+    cv.gradient_bg("#F2F3F5", "#FBFBFC")
+
+    wx = (W - win_w) / 2
+    wy = (H - win_h) / 2
+
+    # 窗口：柔和阴影 + 圆角 + 细边框
+    cv.drop_shadow((wx, wy, wx + win_w, wy + win_h),
+                   radius=8, blur=18, offset=(0, 9), alpha=64)
+    cv.rrect((wx, wy, wx + win_w, wy + win_h), radius=8,
+             fill="#F7F7F8", outline=(0, 0, 0, 34), width=1)
+
+    # 标题栏：标题 + 关闭按钮 + 细分隔线
+    cv.text((wx + 18, wy + 19), "设置全局快捷键", ui_font(14, bold=True), INK, anchor="lm")
+    cv.glyph((wx + win_w - 20, wy + 19), 0xE711, 12, (90, 92, 96, 255))
+    cv.line(((wx + 1, wy + 38), (wx + win_w - 1, wy + 38)),
+            fill=(0, 0, 0, 20), width=1)
+
+    # 说明文字（两行，占位文案）
+    hint_font = ui_font(10.5)
+    hint_color = (60, 62, 66, 255)
+    cv.text((wx + 18, wy + 54), "按下新的快捷键组合（至少包含 Ctrl / Alt / Shift / Win 之一",
+            hint_font, hint_color, anchor="la")
+    cv.text((wx + 18, wy + 71), "+ 一个普通键）", hint_font, hint_color, anchor="la")
+
+    # 只读捕获框
+    box = (wx + 18, wy + 96, wx + win_w - 18, wy + 128)
+    cv.rrect(box, radius=5, fill="#FFFFFF", outline=(0, 0, 0, 46), width=1)
+    cv.text(((box[0] + box[2]) / 2, (box[1] + box[3]) / 2),
+            "Ctrl+Alt+F9", ui_font(13), INK, anchor="mm")
+
+    # 状态行
+    cv.text((wx + 18, wy + 154), "已捕获：Ctrl+Alt+F9（点「保存并注册」生效）",
+            ui_font(10.5), (47, 49, 54, 255), anchor="la")
+
+    # 底部三个按钮（Win11 浅色圆角按钮）
+    btn_h = 28.0
+    btn_w = 100.0
+    gap = 15.0
+    btn_y = wy + win_h - 18 - btn_h
+    inner_w = win_w - 36
+    start_x = wx + 18 + (inner_w - (btn_w * 3 + gap * 2)) / 2
+    for i, label in enumerate(["保存并注册", "清除", "取消"]):
+        bx = start_x + i * (btn_w + gap)
+        cv.rrect((bx, btn_y, bx + btn_w, btn_y + btn_h), radius=4,
+                 fill="#FDFDFD", outline=(0, 0, 0, 50), width=1)
+        cv.text((bx + btn_w / 2, btn_y + btn_h / 2), label, ui_font(11), INK, anchor="mm")
+
+    cv.save(DOCS / "hotkey-settings.png")
 
 
 # ---------------------------------------------------------------------------
@@ -497,6 +571,7 @@ def main() -> None:
     DOCS.mkdir(parents=True, exist_ok=True)
     render_status_lights()
     render_tray_menu()
+    render_hotkey_settings()
     render_tooltip()
     render_toast("notify-completion.png", "任务完成", "「示例项目 A」已完成本轮任务", "info")
     render_toast("notify-approval.png", "需要审批", "有操作在等你批准：pwsh · 示例项目 A", "warning")
@@ -505,6 +580,7 @@ def main() -> None:
     for name in (
         "status-lights.png",
         "tray-menu.png",
+        "hotkey-settings.png",
         "tooltip-multi-session.png",
         "notify-completion.png",
         "notify-approval.png",

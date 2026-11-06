@@ -76,9 +76,23 @@ namespace DshStatusTray
                 {
                     return DebugModes.OpenBalance(options);
                 }
+                if (options.OpenWeb)
+                {
+                    return DebugModes.OpenWebChat();
+                }
+                if (options.OpenStatus)
+                {
+                    return DebugModes.OpenStatusPage();
+                }
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
+
+                // v6 调试模式：直接打开「设置全局快捷键」窗口（不启动托盘/agent）
+                if (options.OpenHotkeySettings)
+                {
+                    return DebugModes.OpenHotkeySettings();
+                }
 
                 // v2 调试模式：--test-notify 走真实气泡/提示音代码路径，5 秒后 Environment.Exit(0)。
                 // 与 --render-icons 一样不占用单实例互斥体，便于在正式托盘运行时做验收。
@@ -187,6 +201,10 @@ namespace DshStatusTray
         public bool OpenConsole;
         public string TestNotify;
         public bool OpenBalance;
+        public bool OpenWeb;
+        public bool OpenStatus;
+        public bool OpenHotkeySettings;
+        public string HotkeyOverride;
 
         public static Options Parse(string[] args)
         {
@@ -229,6 +247,18 @@ namespace DshStatusTray
                         break;
                     case "--open-balance":
                         options.OpenBalance = true;
+                        break;
+                    case "--open-web":
+                        options.OpenWeb = true;
+                        break;
+                    case "--open-status":
+                        options.OpenStatus = true;
+                        break;
+                    case "--open-hotkey-settings":
+                        options.OpenHotkeySettings = true;
+                        break;
+                    case "--hotkey":
+                        options.HotkeyOverride = TakeValue(args, ref index, key, inlineValue);
                         break;
                     case "--test-notify":
                         {
@@ -515,6 +545,11 @@ namespace DshStatusTray
         public static void Info(string message)
         {
             Write("INFO", message);
+        }
+
+        public static void Warn(string message)
+        {
+            Write("WARN", message);
         }
 
         public static void ErrorText(string message)
@@ -984,17 +1019,19 @@ namespace DshStatusTray
     {
         public const string DefaultConsoleUrl = "http://127.0.0.1:3080";
         public const int DefaultPollMs = 500;
-        /// <summary>默认不绑定具体 wav：留空表示使用系统提示音；如需自定义，在 config.json 的 soundFile 里填路径。</summary>
         public const string DefaultSoundFile = "";
         public const string DefaultTopUpUrl = "https://platform.deepseek.com/top_up";
+        public const string DefaultWebChatUrl = "https://chat.deepseek.com/";
+        public const string DefaultStatusUrl = "https://status.deepseek.com/";
 
         private static readonly string[] StateNames = new string[] { "working", "approval", "idle", "offline" };
         private static readonly string[] DefaultColorHex = new string[] { "#F2B705", "#E5484D", "#2FA84F", "#9AA0A6" };
-        // v2 通知键 + v3 余额键：缺失时启动写回补齐（alerts-spec §3 / account-balance-spec §4）。
+        // v2 通知键 + v3 余额键 + v6 菜单/快捷键键：缺失时启动写回补齐
+        // （alerts-spec §3 / account-balance-spec §4 / menu-hotkey-v6 §2）。
         private static readonly string[] RequiredConfigKeys = new string[]
         {
             "notifyCompletion", "notifyApproval", "playSound", "soundFile",
-            "showBalance", "topUpUrl"
+            "showBalance", "topUpUrl", "webChatUrl", "statusUrl", "hotkey"
         };
 
         private readonly Dictionary<string, Color> _colors;
@@ -1006,6 +1043,9 @@ namespace DshStatusTray
         private string _soundFile;
         private bool _showBalance;
         private string _topUpUrl;
+        private string _webChatUrl;
+        private string _statusUrl;
+        private string _hotkey;
 
         private AppConfig()
         {
@@ -1017,6 +1057,9 @@ namespace DshStatusTray
             _soundFile = DefaultSoundFile;
             _showBalance = true;
             _topUpUrl = DefaultTopUpUrl;
+            _webChatUrl = DefaultWebChatUrl;
+            _statusUrl = DefaultStatusUrl;
+            _hotkey = string.Empty;
             _colors = new Dictionary<string, Color>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < StateNames.Length; i++)
             {
@@ -1067,6 +1110,41 @@ namespace DshStatusTray
         public string TopUpUrl
         {
             get { return _topUpUrl; }
+        }
+
+        public string WebChatUrl
+        {
+            get { return _webChatUrl; }
+        }
+
+        public string StatusUrl
+        {
+            get { return _statusUrl; }
+        }
+
+        /// <summary>全局快捷键组合字符串（空 = 未设置）；格式见 menu-hotkey-v6 §4.3。</summary>
+        public string Hotkey
+        {
+            get { return _hotkey; }
+        }
+
+        internal void SetHotkey(string value)
+        {
+            _hotkey = value == null ? string.Empty : value.Trim();
+        }
+
+        /// <summary>把当前生效配置写回 config.json（供设置窗口保存 hotkey 等使用）。</summary>
+        internal void Save(string dataDir)
+        {
+            try
+            {
+                Directory.CreateDirectory(dataDir);
+                WriteConfigFile(Path.Combine(dataDir, "config.json"), this);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("写入 config.json 失败", ex);
+            }
         }
 
         public static AppConfig Defaults()
@@ -1334,6 +1412,19 @@ namespace DshStatusTray
                     _topUpUrl = topUpUrl.Trim();
                 }
             }
+
+            string webChatUrl = J.String(root, "webChatUrl");
+            if (!string.IsNullOrEmpty(webChatUrl) && webChatUrl.Trim().Length > 0)
+            {
+                _webChatUrl = webChatUrl.Trim();
+            }
+            string statusUrl = J.String(root, "statusUrl");
+            if (!string.IsNullOrEmpty(statusUrl) && statusUrl.Trim().Length > 0)
+            {
+                _statusUrl = statusUrl.Trim();
+            }
+            string hotkey = J.String(root, "hotkey");
+            _hotkey = hotkey == null ? string.Empty : hotkey.Trim();
         }
 
         private static bool TryParseHexColorStatic(string value, out Color color)
@@ -1397,7 +1488,10 @@ namespace DshStatusTray
             builder.Append("  \"playSound\": ").Append(config._playSound ? "true" : "false").Append(",\n");
             builder.Append("  \"soundFile\": \"").Append(EscapeJson(config._soundFile)).Append("\",\n");
             builder.Append("  \"showBalance\": ").Append(config._showBalance ? "true" : "false").Append(",\n");
-            builder.Append("  \"topUpUrl\": \"").Append(EscapeJson(config._topUpUrl)).Append("\"\n");
+            builder.Append("  \"topUpUrl\": \"").Append(EscapeJson(config._topUpUrl)).Append("\",\n");
+            builder.Append("  \"webChatUrl\": \"").Append(EscapeJson(config._webChatUrl)).Append("\",\n");
+            builder.Append("  \"statusUrl\": \"").Append(EscapeJson(config._statusUrl)).Append("\",\n");
+            builder.Append("  \"hotkey\": \"").Append(EscapeJson(config._hotkey)).Append("\"\n");
             builder.Append("}\n");
 
             string dir = Path.GetDirectoryName(path);
@@ -1792,9 +1886,771 @@ namespace DshStatusTray
 
     internal static class NativeMethods
     {
+        /// <summary>WM_HOTKEY</summary>
+        public const int WmHotkey = 0x0312;
+        public const int VkLWin = 0x5B;
+        public const int VkRWin = 0x5C;
+
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool DestroyIcon(IntPtr iconHandle);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool RegisterHotKey(IntPtr windowHandle, int id, uint modifiers, uint virtualKey);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool UnregisterHotKey(IntPtr windowHandle, int id);
+
+        [DllImport("user32.dll")]
+        public static extern short GetAsyncKeyState(int virtualKey);
+
+        /// <summary>Win 键（LWin/RWin）按下状态：WinForms KeyData 不提供 Win 修饰键，需单独查询。</summary>
+        public static bool IsWinKeyDown()
+        {
+            try
+            {
+                return (GetAsyncKeyState(VkLWin) & 0x8000) != 0 || (GetAsyncKeyState(VkRWin) & 0x8000) != 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
     }
+
+    /// <summary>
+    /// 全局快捷键定义（menu-hotkey-v6 §4.3）：修饰键位掩码 + 普通虚拟键码，字符串格式 Ctrl+Alt+Shift+Win+Key。
+    /// </summary>
+    internal sealed class HotkeyDefinition
+    {
+        public const uint ModAlt = 0x0001;
+        public const uint ModControl = 0x0002;
+        public const uint ModShift = 0x0004;
+        public const uint ModWin = 0x0008;
+
+        private static readonly string[] SpecialKeyNames = new string[]
+        {
+            "Space", "Up", "Down", "Left", "Right", "Home", "End", "PageUp", "PageDown", "Insert", "Delete"
+        };
+        private static readonly uint[] SpecialKeyCodes = new uint[]
+        {
+            0x20, 0x26, 0x28, 0x25, 0x27, 0x24, 0x23, 0x21, 0x22, 0x2D, 0x2E
+        };
+
+        public uint Modifiers;
+        public uint VirtualKey;
+        public string KeyName;
+
+        public string ToComboString()
+        {
+            StringBuilder builder = new StringBuilder();
+            builder.Append(FormatModifiers(Modifiers));
+            builder.Append(KeyName == null ? string.Empty : KeyName);
+            return builder.ToString();
+        }
+
+        public static string FormatModifiers(uint modifiers)
+        {
+            StringBuilder builder = new StringBuilder();
+            if ((modifiers & ModControl) != 0) { builder.Append("Ctrl+"); }
+            if ((modifiers & ModAlt) != 0) { builder.Append("Alt+"); }
+            if ((modifiers & ModShift) != 0) { builder.Append("Shift+"); }
+            if ((modifiers & ModWin) != 0) { builder.Append("Win+"); }
+            return builder.ToString();
+        }
+
+        /// <summary>解析组合字符串：大小写不敏感、容忍空格；必须 ≥1 修饰键 + 1 个受支持普通键。</summary>
+        public static bool TryParse(string text, out HotkeyDefinition definition, out string error)
+        {
+            definition = null;
+            error = null;
+            if (string.IsNullOrEmpty(text) || text.Trim().Length == 0)
+            {
+                error = "快捷键为空";
+                return false;
+            }
+            string[] rawParts = text.Split(new char[] { '+' }, StringSplitOptions.None);
+            List<string> parts = new List<string>();
+            for (int i = 0; i < rawParts.Length; i++)
+            {
+                string part = rawParts[i] == null ? string.Empty : rawParts[i].Trim();
+                if (part.Length == 0)
+                {
+                    error = "快捷键格式非法";
+                    return false;
+                }
+                parts.Add(part);
+            }
+            if (parts.Count < 2)
+            {
+                error = "至少需要一个修饰键 + 一个普通键";
+                return false;
+            }
+            uint modifiers = 0;
+            uint virtualKey = 0;
+            string keyName = null;
+            for (int i = 0; i < parts.Count; i++)
+            {
+                string token = parts[i].Trim().ToLowerInvariant();
+                if (i < parts.Count - 1)
+                {
+                    if (token == "ctrl" || token == "control") { modifiers |= ModControl; }
+                    else if (token == "alt") { modifiers |= ModAlt; }
+                    else if (token == "shift") { modifiers |= ModShift; }
+                    else if (token == "win" || token == "windows") { modifiers |= ModWin; }
+                    else
+                    {
+                        error = "不支持的修饰键: " + parts[i];
+                        return false;
+                    }
+                }
+                else
+                {
+                    if (!TryMapKeyName(parts[i], out virtualKey, out keyName))
+                    {
+                        error = "不支持的按键: " + parts[i];
+                        return false;
+                    }
+                }
+            }
+            if (modifiers == 0)
+            {
+                error = "至少需要一个修饰键（Ctrl/Alt/Shift/Win）";
+                return false;
+            }
+            definition = new HotkeyDefinition();
+            definition.Modifiers = modifiers;
+            definition.VirtualKey = virtualKey;
+            definition.KeyName = keyName;
+            return true;
+        }
+
+        public static bool TryMapKeyName(string name, out uint virtualKey, out string canonicalName)
+        {
+            virtualKey = 0;
+            canonicalName = null;
+            if (string.IsNullOrEmpty(name))
+            {
+                return false;
+            }
+            string text = name.Trim();
+            if (text.Length == 0)
+            {
+                return false;
+            }
+            string upper = text.ToUpperInvariant();
+            if (upper.Length == 1)
+            {
+                char c = upper[0];
+                if (c >= 'A' && c <= 'Z')
+                {
+                    virtualKey = (uint)c;
+                    canonicalName = c.ToString();
+                    return true;
+                }
+                if (c >= '0' && c <= '9')
+                {
+                    virtualKey = (uint)c;
+                    canonicalName = c.ToString();
+                    return true;
+                }
+            }
+            if (upper.Length >= 2 && upper[0] == 'F')
+            {
+                int functionNumber;
+                if (int.TryParse(upper.Substring(1), NumberStyles.Integer, CultureInfo.InvariantCulture, out functionNumber)
+                    && functionNumber >= 1 && functionNumber <= 24)
+                {
+                    virtualKey = (uint)(0x70 + functionNumber - 1);
+                    canonicalName = "F" + functionNumber.ToString(CultureInfo.InvariantCulture);
+                    return true;
+                }
+            }
+            for (int i = 0; i < SpecialKeyNames.Length; i++)
+            {
+                if (string.Equals(SpecialKeyNames[i], text, StringComparison.OrdinalIgnoreCase))
+                {
+                    virtualKey = SpecialKeyCodes[i];
+                    canonicalName = SpecialKeyNames[i];
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public static bool TryMapVirtualKeyToName(uint virtualKey, out string keyName)
+        {
+            keyName = null;
+            if (virtualKey >= 0x41 && virtualKey <= 0x5A)
+            {
+                keyName = ((char)virtualKey).ToString();
+                return true;
+            }
+            if (virtualKey >= 0x30 && virtualKey <= 0x39)
+            {
+                keyName = ((char)virtualKey).ToString();
+                return true;
+            }
+            if (virtualKey >= 0x70 && virtualKey <= 0x87)
+            {
+                keyName = "F" + ((int)(virtualKey - 0x70) + 1).ToString(CultureInfo.InvariantCulture);
+                return true;
+            }
+            for (int i = 0; i < SpecialKeyCodes.Length; i++)
+            {
+                if (SpecialKeyCodes[i] == virtualKey)
+                {
+                    keyName = SpecialKeyNames[i];
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public static bool IsModifierKey(Keys keyCode)
+        {
+            return keyCode == Keys.ControlKey || keyCode == Keys.LControlKey || keyCode == Keys.RControlKey
+                || keyCode == Keys.ShiftKey || keyCode == Keys.LShiftKey || keyCode == Keys.RShiftKey
+                || keyCode == Keys.Menu || keyCode == Keys.LMenu || keyCode == Keys.RMenu
+                || keyCode == Keys.LWin || keyCode == Keys.RWin;
+        }
+
+        public static uint ModifiersFromKeyData(Keys keyData, bool winDown)
+        {
+            uint modifiers = 0;
+            if ((keyData & Keys.Control) != 0) { modifiers |= ModControl; }
+            if ((keyData & Keys.Alt) != 0) { modifiers |= ModAlt; }
+            if ((keyData & Keys.Shift) != 0) { modifiers |= ModShift; }
+            if (winDown) { modifiers |= ModWin; }
+            return modifiers;
+        }
+
+        /// <summary>从 WinForms 按键事件构造定义；不支持的键返回 null。</summary>
+        public static HotkeyDefinition FromKeys(Keys keyData, bool winDown)
+        {
+            Keys keyCode = keyData & Keys.KeyCode;
+            uint virtualKey = (uint)keyCode;
+            string keyName;
+            if (!TryMapVirtualKeyToName(virtualKey, out keyName))
+            {
+                return null;
+            }
+            HotkeyDefinition definition = new HotkeyDefinition();
+            definition.Modifiers = ModifiersFromKeyData(keyData, winDown);
+            definition.VirtualKey = virtualKey;
+            definition.KeyName = keyName;
+            return definition;
+        }
+    }
+
+    /// <summary>热键注册后端接口（可注入，便于自测注册状态机）。</summary>
+    internal interface IHotkeyBackend
+    {
+        bool Register(IntPtr windowHandle, int id, uint modifiers, uint virtualKey);
+        bool Unregister(IntPtr windowHandle, int id);
+    }
+
+    internal sealed class Win32HotkeyBackend : IHotkeyBackend
+    {
+        public bool Register(IntPtr windowHandle, int id, uint modifiers, uint virtualKey)
+        {
+            return NativeMethods.RegisterHotKey(windowHandle, id, modifiers, virtualKey);
+        }
+
+        public bool Unregister(IntPtr windowHandle, int id)
+        {
+            return NativeMethods.UnregisterHotKey(windowHandle, id);
+        }
+    }
+
+    /// <summary>隐藏消息窗口：接收 WM_HOTKEY 并转发为 .NET 事件。</summary>
+    internal sealed class HotkeyMessageWindow : NativeWindow
+    {
+        public event EventHandler HotkeyPressed;
+
+        public HotkeyMessageWindow()
+        {
+            CreateHandle(new CreateParams());
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == NativeMethods.WmHotkey)
+            {
+                EventHandler handler = HotkeyPressed;
+                if (handler != null)
+                {
+                    try { handler(this, EventArgs.Empty); }
+                    catch (Exception ex) { Log.Error("处理全局快捷键消息失败", ex); }
+                }
+            }
+            base.WndProc(ref m);
+        }
+
+        public void Destroy()
+        {
+            try
+            {
+                if (Handle != IntPtr.Zero)
+                {
+                    DestroyHandle();
+                }
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// 全局快捷键管理器（menu-hotkey-v6 §4.2）：同一时刻只注册一个热键；
+    /// backend 与窗口句柄可注入，便于单元测试注册/注销状态机。
+    /// </summary>
+    internal sealed class HotkeyManager : IDisposable
+    {
+        internal const int HotkeyId = 0x4453; // 'DS'
+        private readonly IHotkeyBackend _backend;
+        private readonly Func<IntPtr> _handleProvider;
+        private HotkeyMessageWindow _window;
+        private bool _registered;
+        private HotkeyDefinition _current;
+        private bool _disposed;
+
+        public event EventHandler HotkeyPressed;
+
+        public HotkeyManager()
+            : this(new Win32HotkeyBackend(), null)
+        {
+        }
+
+        /// <param name="backend">注册后端（可注入测试替身）。</param>
+        /// <param name="handleProvider">消息窗口句柄提供者；null 表示由本类创建隐藏 NativeWindow。</param>
+        public HotkeyManager(IHotkeyBackend backend, Func<IntPtr> handleProvider)
+        {
+            _backend = backend;
+            _handleProvider = handleProvider;
+        }
+
+        public bool IsRegistered
+        {
+            get { return _registered; }
+        }
+
+        public HotkeyDefinition CurrentDefinition
+        {
+            get { return _current; }
+        }
+
+        public string CurrentCombo
+        {
+            get { return _current == null ? string.Empty : _current.ToComboString(); }
+        }
+
+        /// <summary>注册（成功后替换旧热键）；definition 为 null 表示仅注销。</summary>
+        public bool TryRegister(HotkeyDefinition definition, out string error)
+        {
+            error = null;
+            if (_disposed)
+            {
+                error = "热键管理器已释放";
+                return false;
+            }
+            Unregister();
+            if (definition == null)
+            {
+                return true;
+            }
+            IntPtr handle = GetHandle();
+            if (handle == IntPtr.Zero)
+            {
+                error = "无法创建热键消息窗口";
+                return false;
+            }
+            bool ok;
+            try
+            {
+                ok = _backend.Register(handle, HotkeyId, definition.Modifiers, definition.VirtualKey);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("注册全局快捷键异常", ex);
+                ok = false;
+            }
+            if (!ok)
+            {
+                error = "注册失败：快捷键可能被其他程序占用";
+                return false;
+            }
+            _registered = true;
+            _current = definition;
+            return true;
+        }
+
+        public void Unregister()
+        {
+            if (!_registered)
+            {
+                return;
+            }
+            IntPtr handle = GetHandleIfCreated();
+            try
+            {
+                if (handle != IntPtr.Zero)
+                {
+                    _backend.Unregister(handle, HotkeyId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("注销全局快捷键异常", ex);
+            }
+            _registered = false;
+            _current = null;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            _disposed = true;
+            Unregister();
+            if (_window != null)
+            {
+                _window.HotkeyPressed -= OnWindowHotkeyPressed;
+                _window.Destroy();
+                _window = null;
+            }
+        }
+
+        private IntPtr GetHandleIfCreated()
+        {
+            if (_handleProvider != null)
+            {
+                try { return _handleProvider(); }
+                catch { return IntPtr.Zero; }
+            }
+            return _window == null ? IntPtr.Zero : _window.Handle;
+        }
+
+        private IntPtr GetHandle()
+        {
+            if (_handleProvider != null)
+            {
+                try { return _handleProvider(); }
+                catch { return IntPtr.Zero; }
+            }
+            EnsureWindow();
+            return _window == null ? IntPtr.Zero : _window.Handle;
+        }
+
+        private void EnsureWindow()
+        {
+            if (_window != null)
+            {
+                return;
+            }
+            _window = new HotkeyMessageWindow();
+            _window.HotkeyPressed += OnWindowHotkeyPressed;
+        }
+
+        private void OnWindowHotkeyPressed(object sender, EventArgs e)
+        {
+            EventHandler handler = HotkeyPressed;
+            if (handler != null)
+            {
+                handler(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 「设置全局快捷键」模态窗口（menu-hotkey-v6 §4.1）。
+    /// 打开期间临时注销已有热键；保存/清除/取消/关闭后按 config 中的最新值恢复注册。
+    /// </summary>
+    internal sealed class HotkeySettingsForm : Form
+    {
+        private readonly AppConfig _config;
+        private readonly HotkeyManager _manager;
+        private readonly string _dataDir;
+
+        private Label _instructionLabel;
+        private TextBox _captureBox;
+        private Label _statusLabel;
+        private Button _saveButton;
+        private Button _clearButton;
+        private Button _cancelButton;
+
+        private HotkeyDefinition _captured;
+        private string _displayText;
+
+        public HotkeySettingsForm(AppConfig config, HotkeyManager manager, string dataDir)
+        {
+            _config = config;
+            _manager = manager;
+            _dataDir = dataDir;
+            InitializeComponent();
+        }
+
+        private void InitializeComponent()
+        {
+            Text = "设置全局快捷键";
+            StartPosition = FormStartPosition.CenterScreen;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = false;
+            ClientSize = new Size(420, 260);
+
+            _instructionLabel = new Label();
+            _instructionLabel.Text = "按下新的快捷键组合（至少包含 Ctrl / Alt / Shift / Win 之一 + 一个普通键）";
+            _instructionLabel.SetBounds(20, 16, 380, 44);
+            _instructionLabel.AutoSize = false;
+
+            _captureBox = new TextBox();
+            _captureBox.ReadOnly = true;
+            _captureBox.TextAlign = HorizontalAlignment.Center;
+            _captureBox.SetBounds(20, 66, 380, 28);
+            _captureBox.Text = "按下快捷键…";
+            _captureBox.AccessibleName = "快捷键捕获框";
+            _displayText = string.Empty;
+
+            _statusLabel = new Label();
+            _statusLabel.SetBounds(20, 104, 380, 44);
+            _statusLabel.AutoSize = false;
+            _statusLabel.AccessibleName = "状态";
+
+            _saveButton = new Button();
+            _saveButton.Text = "保存并注册";
+            _saveButton.SetBounds(48, 196, 104, 32);
+            _saveButton.Click += OnSaveClick;
+
+            _clearButton = new Button();
+            _clearButton.Text = "清除";
+            _clearButton.SetBounds(158, 196, 104, 32);
+            _clearButton.Click += OnClearClick;
+
+            _cancelButton = new Button();
+            _cancelButton.Text = "取消";
+            _cancelButton.SetBounds(268, 196, 104, 32);
+            _cancelButton.Click += OnCancelClick;
+
+            Controls.Add(_instructionLabel);
+            Controls.Add(_captureBox);
+            Controls.Add(_statusLabel);
+            Controls.Add(_saveButton);
+            Controls.Add(_clearButton);
+            Controls.Add(_cancelButton);
+        }
+
+        protected override void OnLoad(EventArgs e)
+        {
+            base.OnLoad(e);
+            // 窗口打开期间临时注销旧热键，防止按旧组合触发控制台
+            try
+            {
+                _manager.Unregister();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("打开设置窗口时注销热键失败", ex);
+            }
+            _captured = null;
+            SetCaptureDisplay(_config.Hotkey);
+            _statusLabel.Text = BuildSavedStatusText();
+            Log.Info("打开全局快捷键设置窗口，已暂停旧热键: " + (_config.Hotkey.Length == 0 ? "(未设置)" : _config.Hotkey));
+            try { _captureBox.Focus(); }
+            catch { }
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            base.OnFormClosed(e);
+            RestoreRegistrationFromConfig();
+        }
+
+        private string BuildSavedStatusText()
+        {
+            string saved = _config.Hotkey;
+            if (string.IsNullOrEmpty(saved))
+            {
+                return "当前：未设置";
+            }
+            return "当前：" + saved + "（窗口关闭后恢复注册）";
+        }
+
+        private void SetCaptureDisplay(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                _captureBox.Text = "按下快捷键…";
+                return;
+            }
+            _captureBox.Text = text;
+        }
+
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+        {
+            try
+            {
+                Keys keyCode = keyData & Keys.KeyCode;
+
+                if (keyCode == Keys.Escape)
+                {
+                    _captured = null;
+                    SetCaptureDisplay(_config.Hotkey);
+                    _statusLabel.Text = "已取消当前捕获";
+                    return true;
+                }
+
+                bool noModifier = (keyData & (Keys.Control | Keys.Alt | Keys.Shift)) == 0;
+                if (noModifier && (keyCode == Keys.Back || keyCode == Keys.Delete))
+                {
+                    _captured = null;
+                    SetCaptureDisplay(string.Empty);
+                    _statusLabel.Text = "已清除捕获（点「保存并注册」生效）";
+                    return true;
+                }
+
+                if (HotkeyDefinition.IsModifierKey(keyCode))
+                {
+                    uint modifiers = HotkeyDefinition.ModifiersFromKeyData(keyData, NativeMethods.IsWinKeyDown());
+                    string prefix = HotkeyDefinition.FormatModifiers(modifiers);
+                    if (prefix.Length > 0)
+                    {
+                        SetCaptureDisplay(prefix + "…");
+                        _statusLabel.Text = "请再按一个普通键";
+                    }
+                    return true;
+                }
+
+                HotkeyDefinition definition = HotkeyDefinition.FromKeys(keyData, NativeMethods.IsWinKeyDown());
+                if (definition == null)
+                {
+                    _statusLabel.Text = "不支持该键，请换一个（支持 A-Z / 0-9 / F1-F24 / Space / 方向键 / Home / End / PageUp / PageDown / Insert / Delete）";
+                    return true;
+                }
+                if (definition.Modifiers == 0)
+                {
+                    _statusLabel.Text = "请至少按住 Ctrl / Alt / Shift / Win 之一，再按普通键";
+                    return true;
+                }
+                _captured = definition;
+                SetCaptureDisplay(definition.ToComboString());
+                _statusLabel.Text = "已捕获：" + definition.ToComboString() + "（点「保存并注册」生效）";
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("捕获快捷键失败", ex);
+                return true;
+            }
+        }
+
+        private void OnSaveClick(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_captured == null)
+                {
+                    // 未捕获到有效组合：视为清除
+                    _manager.Unregister();
+                    _config.SetHotkey(string.Empty);
+                    _config.Save(_dataDir);
+                    _statusLabel.Text = "当前：未设置";
+                    Log.Info("全局快捷键已清除（保存空组合）");
+                    Close();
+                    return;
+                }
+
+                string combo = _captured.ToComboString();
+                string error;
+                bool ok = _manager.TryRegister(_captured, out error);
+                // 无论注册成功与否都持久化（契约 §4.1：写入值但标注失败，下次启动仍尝试）
+                _config.SetHotkey(combo);
+                _config.Save(_dataDir);
+                if (!ok)
+                {
+                    _statusLabel.Text = "注册失败：快捷键可能被其他程序占用";
+                    Log.Warn("全局快捷键注册失败: " + combo + " - " + error);
+                    return;
+                }
+                _statusLabel.Text = "当前：" + combo + "（已注册）";
+                Log.Info("全局快捷键已保存并注册: " + combo);
+                Close();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("保存全局快捷键失败", ex);
+                _statusLabel.Text = "保存失败：" + ex.Message;
+            }
+        }
+
+        private void OnClearClick(object sender, EventArgs e)
+        {
+            try
+            {
+                _manager.Unregister();
+                _config.SetHotkey(string.Empty);
+                _config.Save(_dataDir);
+                _captured = null;
+                SetCaptureDisplay(string.Empty);
+                _statusLabel.Text = "当前：未设置";
+                Log.Info("全局快捷键已清除");
+                Close();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("清除全局快捷键失败", ex);
+                _statusLabel.Text = "清除失败：" + ex.Message;
+            }
+        }
+
+        private void OnCancelClick(object sender, EventArgs e)
+        {
+            Close();
+        }
+
+        private void RestoreRegistrationFromConfig()
+        {
+            try
+            {
+                string saved = _config.Hotkey;
+                if (string.IsNullOrEmpty(saved))
+                {
+                    _manager.Unregister();
+                    Log.Info("全局快捷键设置窗口关闭：未设置");
+                    return;
+                }
+                HotkeyDefinition definition;
+                string parseError;
+                if (!HotkeyDefinition.TryParse(saved, out definition, out parseError))
+                {
+                    _manager.Unregister();
+                    Log.Warn("保存的全局快捷键非法，未注册: " + saved + " (" + parseError + ")");
+                    return;
+                }
+                if (_manager.IsRegistered && string.Equals(_manager.CurrentCombo, saved, StringComparison.Ordinal))
+                {
+                    return;
+                }
+                string registerError;
+                if (_manager.TryRegister(definition, out registerError))
+                {
+                    Log.Info("全局快捷键已重新注册: " + saved);
+                }
+                else
+                {
+                    Log.Warn("恢复全局快捷键注册失败: " + saved + " - " + registerError);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("恢复全局快捷键注册失败", ex);
+            }
+        }
+    }
+
 
     internal static class ConsoleLauncher
     {
@@ -1925,6 +2781,61 @@ namespace DshStatusTray
             catch (Exception ex)
             {
                 Log.Error("--open-balance 失败", ex);
+                return 1;
+            }
+        }
+
+        /// <summary>--open-web：打开网页版 DeepSeek（menu-hotkey-v6 §5）。</summary>
+        public static int OpenWebChat()
+        {
+            try
+            {
+                AppConfig config = AppConfig.Load(Paths.DataDir);
+                bool opened = ConsoleLauncher.Open(config.WebChatUrl, "打开网页版 DeepSeek");
+                Log.Info("--open-web " + (opened ? "成功" : "失败") + ": " + config.WebChatUrl);
+                return opened ? 0 : 1;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("--open-web 失败", ex);
+                return 1;
+            }
+        }
+
+        /// <summary>--open-status：打开 DS 服务器状态页（menu-hotkey-v6 §5）。</summary>
+        public static int OpenStatusPage()
+        {
+            try
+            {
+                AppConfig config = AppConfig.Load(Paths.DataDir);
+                bool opened = ConsoleLauncher.Open(config.StatusUrl, "打开 DS 服务器状态页");
+                Log.Info("--open-status " + (opened ? "成功" : "失败") + ": " + config.StatusUrl);
+                return opened ? 0 : 1;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("--open-status 失败", ex);
+                return 1;
+            }
+        }
+
+        /// <summary>--open-hotkey-settings：直接打开「设置全局快捷键」窗口（不启动托盘/agent）。</summary>
+        public static int OpenHotkeySettings()
+        {
+            try
+            {
+                AppConfig config = AppConfig.LoadOrCreate(Paths.DataDir);
+                using (HotkeyManager manager = new HotkeyManager())
+                using (HotkeySettingsForm form = new HotkeySettingsForm(config, manager, Paths.DataDir))
+                {
+                    form.ShowDialog();
+                }
+                Log.Info("--open-hotkey-settings 设置窗口已关闭");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("--open-hotkey-settings 失败", ex);
                 return 1;
             }
         }
@@ -2346,6 +3257,51 @@ namespace DshStatusTray
         }
     }
 
+    /// <summary>
+    /// 左键打开控制台的去抖器（task-19）：Win11 上 NotifyIcon.MouseClick 的 Clicks 可能为 0，
+    /// 左键一律视为单击；用时间窗口去抖，避免双击打开两个标签页（第一下打开、第二下忽略）。
+    /// 纯逻辑、可注入经过时间，便于自测。
+    /// </summary>
+    internal sealed class ClickDebouncer
+    {
+        private readonly int _debounceMs;
+        private bool _hasAccepted;
+
+        public ClickDebouncer(int debounceMs)
+        {
+            _debounceMs = debounceMs < 0 ? 0 : debounceMs;
+        }
+
+        public bool HasAccepted
+        {
+            get { return _hasAccepted; }
+        }
+
+        public int DebounceMs
+        {
+            get { return _debounceMs; }
+        }
+
+        /// <summary>
+        /// 判断是否接受本次点击；elapsedSinceLastAcceptedMs = 距上次接受点击的毫秒数
+        /// （首次传入 int.MaxValue）。窗口内重复点击返回 false。
+        /// </summary>
+        public bool TryAccept(int elapsedSinceLastAcceptedMs)
+        {
+            if (_hasAccepted && elapsedSinceLastAcceptedMs >= 0 && elapsedSinceLastAcceptedMs < _debounceMs)
+            {
+                return false;
+            }
+            _hasAccepted = true;
+            return true;
+        }
+
+        public void Reset()
+        {
+            _hasAccepted = false;
+        }
+    }
+
     /// <summary>托盘主体：NotifyIcon + 右键菜单 + 定时轮询。</summary>
     internal sealed class TrayApp : ApplicationContext
     {
@@ -2356,12 +3312,15 @@ namespace DshStatusTray
         private const int SoundMinIntervalMs = 800;
         private const int BalloonTimeoutMs = 6000;
         private const int BalloonTextMaxLength = 120;
+        private const int LeftClickDebounceMs = 700;
 
         private readonly AppConfig _config;
+        private readonly string _dataDir;
         private readonly string _statusPath;
         private readonly bool _noAgent;
         private readonly long _trayStartedAtMs;
         private readonly string _testNotifyKind;
+        private readonly string _hotkeyOverride;
 
         private NotifyIcon _notifyIcon;
         private ContextMenuStrip _contextMenu;
@@ -2371,6 +3330,7 @@ namespace DshStatusTray
         private System.Windows.Forms.Timer _testNotifyTimer;
         private System.Windows.Forms.Timer _testExitTimer;
         private AgentSupervisor _agent;
+        private HotkeyManager _hotkeyManager;
 
         private Icon _icon;
         private IntPtr _iconHandle = IntPtr.Zero;
@@ -2386,6 +3346,8 @@ namespace DshStatusTray
         private SoundPlayer _soundPlayer;
         private string _soundPlayerPath;
         private int _lastSoundTick = Environment.TickCount - SoundMinIntervalMs;
+        private readonly ClickDebouncer _leftClickDebouncer = new ClickDebouncer(LeftClickDebounceMs);
+        private int _lastLeftClickTick;
 
         public TrayApp(Options options, AppConfig config, string dataDir)
             : this(options, config, dataDir, null)
@@ -2395,7 +3357,9 @@ namespace DshStatusTray
         public TrayApp(Options options, AppConfig config, string dataDir, string testNotifyKind)
         {
             _config = config;
+            _dataDir = dataDir;
             _testNotifyKind = testNotifyKind;
+            _hotkeyOverride = options.HotkeyOverride;
             _noAgent = options.NoAgent || !string.IsNullOrEmpty(testNotifyKind);
             _trayStartedAtMs = TimeUtil.NowEpochMs();
 
@@ -2418,6 +3382,7 @@ namespace DshStatusTray
 
             CreateMenu();
             CreateNotifyIcon();
+            SetupHotkey();
 
             if (!_noAgent)
             {
@@ -2453,10 +3418,14 @@ namespace DshStatusTray
         private void CreateMenu()
         {
             ToolStripMenuItem openConsoleItem;
+            ToolStripMenuItem openWebItem;
+            ToolStripMenuItem openStatusItem;
             ToolStripMenuItem balanceItem;
+            ToolStripMenuItem hotkeyItem;
             ToolStripMenuItem exitItem;
-            _contextMenu = BuildContextMenu(OnOpenConsoleClick, OnBalanceClick, OnExitClick,
-                out openConsoleItem, out balanceItem, out exitItem);
+            _contextMenu = BuildContextMenu(OnOpenConsoleClick, OnOpenWebChatClick, OnOpenStatusClick, OnBalanceClick,
+                OnHotkeySettingsClick, OnExitClick,
+                out openConsoleItem, out openWebItem, out openStatusItem, out balanceItem, out hotkeyItem, out exitItem);
             _balanceItem = balanceItem;
             // v3：充值余额项（account-balance-spec §5.2），位于「打开控制台」之后、分隔线/「退出」之前。
             _balanceItem.Visible = _config.ShowBalance;
@@ -2467,38 +3436,44 @@ namespace DshStatusTray
         }
 
         /// <summary>
-        /// 构建右键菜单（state-model-v5 §2.3）：只有操作项，不再有状态行/权限行。
-        /// 顺序：打开控制台、充值余额、分隔线、退出。抽成静态方法便于自测校验结构。
+        /// 构建右键菜单（menu-hotkey-v6 §1）：
+        /// 打开控制台 / 打开网页版 DeepSeek / 查看 DS 服务器状态 / 充值余额 / ── / 设置全局快捷键… / ── / 退出。
+        /// 抽成静态方法便于自测校验结构。
         /// </summary>
-        internal static ContextMenuStrip BuildContextMenu(EventHandler onOpenConsole, EventHandler onBalance, EventHandler onExit,
-            out ToolStripMenuItem openConsoleItem, out ToolStripMenuItem balanceItem, out ToolStripMenuItem exitItem)
+        internal static ContextMenuStrip BuildContextMenu(EventHandler onOpenConsole, EventHandler onOpenWeb,
+            EventHandler onOpenStatus, EventHandler onOpenBalance, EventHandler onHotkeySettings, EventHandler onExit,
+            out ToolStripMenuItem openConsoleItem, out ToolStripMenuItem openWebItem, out ToolStripMenuItem openStatusItem,
+            out ToolStripMenuItem balanceItem, out ToolStripMenuItem hotkeyItem, out ToolStripMenuItem exitItem)
         {
-            openConsoleItem = new ToolStripMenuItem("打开控制台");
-            if (onOpenConsole != null)
-            {
-                openConsoleItem.Click += onOpenConsole;
-            }
-
-            balanceItem = new ToolStripMenuItem("充值余额：未登录");
-            if (onBalance != null)
-            {
-                balanceItem.Click += onBalance;
-            }
-
-            ToolStripSeparator separator = new ToolStripSeparator();
-
-            exitItem = new ToolStripMenuItem("退出");
-            if (onExit != null)
-            {
-                exitItem.Click += onExit;
-            }
+            openConsoleItem = CreateMenuItem("打开控制台", onOpenConsole);
+            openWebItem = CreateMenuItem("打开网页版 DeepSeek", onOpenWeb);
+            openStatusItem = CreateMenuItem("查看 DS 服务器状态", onOpenStatus);
+            balanceItem = CreateMenuItem("充值余额：未登录", onOpenBalance);
+            ToolStripSeparator firstSeparator = new ToolStripSeparator();
+            hotkeyItem = CreateMenuItem("设置全局快捷键…", onHotkeySettings);
+            ToolStripSeparator secondSeparator = new ToolStripSeparator();
+            exitItem = CreateMenuItem("退出", onExit);
 
             ContextMenuStrip menu = new ContextMenuStrip();
             menu.Items.Add(openConsoleItem);
+            menu.Items.Add(openWebItem);
+            menu.Items.Add(openStatusItem);
             menu.Items.Add(balanceItem);
-            menu.Items.Add(separator);
+            menu.Items.Add(firstSeparator);
+            menu.Items.Add(hotkeyItem);
+            menu.Items.Add(secondSeparator);
             menu.Items.Add(exitItem);
             return menu;
+        }
+
+        private static ToolStripMenuItem CreateMenuItem(string text, EventHandler handler)
+        {
+            ToolStripMenuItem item = new ToolStripMenuItem(text);
+            if (handler != null)
+            {
+                item.Click += handler;
+            }
+            return item;
         }
 
         internal static string DescribeMenuItems(ContextMenuStrip menu)
@@ -2527,10 +3502,99 @@ namespace DshStatusTray
         {
             _notifyIcon = new NotifyIcon();
             _notifyIcon.ContextMenuStrip = _contextMenu;
-            _notifyIcon.DoubleClick += OnNotifyIconDoubleClick;
+            // v6/task-19：左键单击 = 打开控制台（只判断左键 + 700ms 去抖防双击开两个标签页）
+            _notifyIcon.MouseClick += OnNotifyIconMouseClick;
             ApplyTooltip("状态监视器启动中");
             SetIcon(_config.GetColor("idle"));
             _notifyIcon.Visible = true;
+        }
+
+        // ---------- v6：全局快捷键（menu-hotkey-v6 §4） ----------
+
+        /// <summary>
+        /// 托盘图标左键是否应打开控制台：只判断左键，忽略 clicks。
+        /// （本机 Win11 实测：NotifyIcon.MouseClick 的 e.Clicks 单次点击为 0、双击第二下才为 2，
+        /// 因此不能用 clicks==1 判定；重复点击的去抖在 OnNotifyIconMouseClick 中处理。）
+        /// </summary>
+        internal static bool ShouldOpenConsoleOnMouseClick(MouseButtons button, int clicks)
+        {
+            return button == MouseButtons.Left;
+        }
+
+        private void SetupHotkey()
+        {
+            try
+            {
+                _hotkeyManager = new HotkeyManager();
+                _hotkeyManager.HotkeyPressed += OnGlobalHotkeyPressed;
+
+                string combo = _config.Hotkey;
+                if (!string.IsNullOrEmpty(_hotkeyOverride))
+                {
+                    combo = _hotkeyOverride.Trim();
+                    Log.Info("--hotkey 覆盖本次运行: " + combo);
+                }
+                if (string.IsNullOrEmpty(combo))
+                {
+                    Log.Info("全局快捷键: 未设置");
+                    return;
+                }
+                HotkeyDefinition definition;
+                string parseError;
+                if (!HotkeyDefinition.TryParse(combo, out definition, out parseError))
+                {
+                    Log.Warn("全局快捷键配置非法，未注册: " + combo + " (" + parseError + ")");
+                    return;
+                }
+                string registerError;
+                if (_hotkeyManager.TryRegister(definition, out registerError))
+                {
+                    Log.Info("全局快捷键已注册: " + definition.ToComboString());
+                }
+                else
+                {
+                    Log.Warn("全局快捷键注册失败: " + definition.ToComboString() + " - " + registerError);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("初始化全局快捷键失败", ex);
+            }
+        }
+
+        private void OnGlobalHotkeyPressed(object sender, EventArgs e)
+        {
+            try
+            {
+                string combo = _hotkeyManager == null ? string.Empty : _hotkeyManager.CurrentCombo;
+                string url = _config.ConsoleUrl;
+                Log.Info("全局快捷键触发: " + combo + " -> " + url);
+                ConsoleLauncher.Open(url);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("全局快捷键触发失败", ex);
+            }
+        }
+
+        private void OpenHotkeySettings()
+        {
+            try
+            {
+                if (_hotkeyManager == null)
+                {
+                    Log.Warn("全局快捷键管理器未初始化，无法打开设置窗口");
+                    return;
+                }
+                using (HotkeySettingsForm form = new HotkeySettingsForm(_config, _hotkeyManager, _dataDir))
+                {
+                    form.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("打开全局快捷键设置窗口失败", ex);
+            }
         }
 
         // ---------- v2：气泡通知 + 提示音（alerts-spec §4） ----------
@@ -2605,7 +3669,7 @@ namespace DshStatusTray
                 completion.Key = "test:completion:" + now.ToString(CultureInfo.InvariantCulture);
                 completion.At = now;
                 completion.SessionId = "session-test";
-                completion.Title = "示例项目 A";
+                completion.Title = "DSH状态托盘监控工具";
                 completion.Main = true;
                 fake.Completion = completion;
             }
@@ -2617,7 +3681,7 @@ namespace DshStatusTray
                 attention.At = now;
                 attention.ToolName = "pwsh";
                 attention.SessionId = "session-test";
-                attention.Title = "示例项目 A";
+                attention.Title = "DSH状态托盘监控工具";
                 attention.Main = true;
                 attention.PendingCount = 1;
                 fake.Attention = attention;
@@ -2775,20 +3839,6 @@ namespace DshStatusTray
             _lastSoundTick = Environment.TickCount;
 
             string path = ResolveSoundPath(_config.SoundFile);
-            if (path.Length == 0)
-            {
-                // soundFile 未配置：直接使用系统提示音，不构造 SoundPlayer。
-                Log.Info("播放系统提示音（未配置 soundFile）");
-                try
-                {
-                    SystemSounds.Exclamation.Play();
-                }
-                catch (Exception fallbackEx)
-                {
-                    Log.Error("播放系统提示音失败", fallbackEx);
-                }
-                return;
-            }
             Log.Info("播放提示音: " + path);
             try
             {
@@ -2822,7 +3872,7 @@ namespace DshStatusTray
             }
         }
 
-        /// <summary>soundFile 支持绝对路径、相对路径（相对 exe 目录）；留空表示使用系统提示音。</summary>
+        /// <summary>soundFile 支持绝对路径、相对最简（相对 exe 目录）。</summary>
         internal static string ResolveSoundPath(string configured)
         {
             string value = configured;
@@ -2831,10 +3881,6 @@ namespace DshStatusTray
                 value = AppConfig.DefaultSoundFile;
             }
             value = value.Trim();
-            if (value.Length == 0)
-            {
-                return string.Empty; // 未配置 → 使用系统默认提示音
-            }
             try
             {
                 if (Path.IsPathRooted(value))
@@ -3503,9 +4549,67 @@ namespace DshStatusTray
             }
         }
 
-        private void OnNotifyIconDoubleClick(object sender, EventArgs e)
+        private void OnOpenWebChatClick(object sender, EventArgs e)
         {
-            OnOpenConsoleClick(sender, e);
+            try
+            {
+                bool opened = ConsoleLauncher.Open(_config.WebChatUrl, "打开网页版 DeepSeek");
+                if (opened)
+                {
+                    Log.Info("打开网页版 DeepSeek: " + _config.WebChatUrl);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("打开网页版 DeepSeek 失败", ex);
+            }
+        }
+
+        private void OnOpenStatusClick(object sender, EventArgs e)
+        {
+            try
+            {
+                bool opened = ConsoleLauncher.Open(_config.StatusUrl, "打开 DS 服务器状态页");
+                if (opened)
+                {
+                    Log.Info("打开 DS 服务器状态: " + _config.StatusUrl);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("打开 DS 服务器状态失败", ex);
+            }
+        }
+
+        private void OnHotkeySettingsClick(object sender, EventArgs e)
+        {
+            OpenHotkeySettings();
+        }
+
+        private void OnNotifyIconMouseClick(object sender, MouseEventArgs e)
+        {
+            try
+            {
+                // task-19：Win11 上托盘 MouseClick 的 e.Clicks 可能恒为 0，因此只看左键；
+                // 双击的副作用用 700ms 时间去抖避免打开两个标签页（第一下打开、第二下忽略）。
+                if (!ShouldOpenConsoleOnMouseClick(e.Button, e.Clicks))
+                {
+                    return;
+                }
+                int elapsed = _leftClickDebouncer.HasAccepted ? TimeUtil.ElapsedMs(_lastLeftClickTick) : int.MaxValue;
+                if (!_leftClickDebouncer.TryAccept(elapsed))
+                {
+                    Log.Info("托盘左键重复点击已忽略（去抖 < " + LeftClickDebounceMs.ToString(CultureInfo.InvariantCulture) + "ms）");
+                    return;
+                }
+                _lastLeftClickTick = Environment.TickCount;
+                Log.Info("托盘左键单击: 打开控制台");
+                OnOpenConsoleClick(sender, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("处理托盘图标点击失败", ex);
+            }
         }
 
         private void OnExitClick(object sender, EventArgs e)
@@ -3599,6 +4703,21 @@ namespace DshStatusTray
 
             try
             {
+                if (_hotkeyManager != null)
+                {
+                    _hotkeyManager.HotkeyPressed -= OnGlobalHotkeyPressed;
+                    _hotkeyManager.Dispose();
+                    _hotkeyManager = null;
+                    Log.Info("全局快捷键已注销");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("注销全局快捷键失败", ex);
+            }
+
+            try
+            {
                 if (_notifyIcon != null)
                 {
                     _notifyIcon.Visible = false;
@@ -3614,7 +4733,7 @@ namespace DshStatusTray
                 if (_notifyIcon != null)
                 {
                     _notifyIcon.ContextMenuStrip = null;
-                    _notifyIcon.DoubleClick -= OnNotifyIconDoubleClick;
+                    _notifyIcon.MouseClick -= OnNotifyIconMouseClick;
                     _notifyIcon.Dispose();
                     _notifyIcon = null;
                 }

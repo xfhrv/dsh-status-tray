@@ -1,6 +1,6 @@
 # DSH 状态托盘 — 状态模型简化 + 菜单精简契约（v5）
 
-> 本文档描述 v5 版本的状态模型简化与菜单精简契约（当前最新版本），叠加在 [status-schema.md](status-schema.md)（v1）、[alerts-spec.md](alerts-spec.md)（v2）、[account-balance-spec.md](account-balance-spec.md)（v3）、[working-sessions-spec.md](working-sessions-spec.md)（v4）之上；冲突处以本文件为准。文档索引见 [README.md](README.md)。
+> 本文档描述 v5 版本的状态模型简化与菜单精简契约（v5），叠加在 [status-schema.md](status-schema.md)（v1）、[alerts-spec.md](alerts-spec.md)（v2）、[account-balance-spec.md](account-balance-spec.md)（v3）、[working-sessions-spec.md](working-sessions-spec.md)（v4）之上；冲突处以本文件为准。文档索引见 [README.md](README.md)。v6 在 v5 之上扩展了右键菜单与全局快捷键（见 [menu-hotkey-v6.md](menu-hotkey-v6.md)），状态模型不变。
 > 设计目标：
 > 1. **取消"⚫ 深灰"状态**；**"🟢 绿"代表"空闲 / DSH 正常运行"**（不再区分"限制状态"与"完全权限"）；**"⚪ 灰"改为代表"DSH 未运行"**。
 > 2. **右键菜单不再显示"状态"行和"权限"行**（只保留操作项）。

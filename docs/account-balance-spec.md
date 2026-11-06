@@ -1,6 +1,6 @@
 # DSH 状态托盘 — 账户"充值余额"菜单增强契约（v3）
 
-> 本文档描述 v3 版本的账户余额契约，叠加在 [status-schema.md](status-schema.md)（v1）与 [alerts-spec.md](alerts-spec.md)（v2）之上；冲突处以本文件为准。v4–v5 以增量方式继续叠加，当前最新行为以 v5 为准；文档索引见 [README.md](README.md)。
+> 本文档描述 v3 版本的账户余额契约，叠加在 [status-schema.md](status-schema.md)（v1）与 [alerts-spec.md](alerts-spec.md)（v2）之上；冲突处以本文件为准。v4–v6 以增量方式继续叠加，当前最新行为以 v6 为准（v6 见 [menu-hotkey-v6.md](menu-hotkey-v6.md)）；文档索引见 [README.md](README.md)。
 > 目标：右键菜单里新增一项显示当前 DeepSeek 账户**充值余额**的功能。
 > 接口可用性（已验证）：`GET https://platform.deepseek.com/api/v0/users/get_user_summary`，用 `<DSH_HOME>/.credentials.yaml` 里 `deepseek-account-platform/default` 的 token 作 `x-dsh-auth-token` 头，HTTP 200、`code=0`、`data.biz_code=0`，`data.biz_data.normal_wallets=[{currency:"CNY",balance:"12.3400000000000000"}]`（充值余额），`bonus_wallets`（赠送余额）另列。
 

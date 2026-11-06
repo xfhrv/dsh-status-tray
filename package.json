@@ -1,7 +1,7 @@
 {
   "name": "dsh-status-tray",
-  "version": "1.0.0",
-  "description": "Windows system-tray status light for DeepSeek Harness (DSH): see at a glance whether DSH is working, waiting for approval, idle, or offline.",
+  "version": "1.1.0",
+  "description": "Windows system-tray status light for DeepSeek Harness (DSH): see at a glance whether DSH is working, waiting for approval, idle, or offline; with desktop notifications, account balance, quick links, and a global hotkey.",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -21,6 +21,7 @@
     "tray",
     "system-tray",
     "winforms",
-    "status-monitor"
+    "status-monitor",
+    "hotkey"
   ]
 }
