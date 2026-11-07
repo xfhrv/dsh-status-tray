@@ -1,14 +1,16 @@
 # DSH 状态托盘 · DSH Status Tray
 
-**Windows 任务栏托盘小工具：一眼看清本机 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai)当前离线在干什么——是在干活，还是在等你。**
+**Windows 任务栏 / macOS 菜单栏小工具：一眼看清本机 [DeepSeek Harness（DSH）](https://github.com/deepseek-ai)当前离线在干什么——是在干活，还是在等你。**
 
 ![四种状态灯](docs/status-lights.png)
 
 ![license](https://img.shields.io/badge/license-MIT-blue.svg)
-![platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6.svg)
+![platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20%C2%B7%20macOS%2011%2B-0078D6.svg)
 ![node](https://img.shields.io/badge/node-%3E%3D18-339933.svg)
 
 > 非官方社区项目，与 DeepSeek 官方无关。
+>
+> **macOS 版：原生 AppKit 菜单栏应用，构建 / 使用 / 差异说明见 [README-macos.md](README-macos.md)。**
 
 ---
 
@@ -30,11 +32,11 @@
 ## 功能特性
 
 - **四色状态灯**：工作中 / 需要审批 / 空闲 / DSH 未运行，300ms 级的实时反馈。
-- **多会话悬停提示**：鼠标移上去，逐个列出所有正在工作的主会话标题（自动适配 Windows 托盘提示 63 字符上限）。
-- **桌面通知 + 提示音**：任务完成、有操作需要审批时弹 Windows 通知气泡；默认用系统提示音，也可指定自己的 `.wav`。
-- **充值余额菜单**：右键直接显示 DeepSeek 账户充值余额，点击打开官方充值页。
-- **快捷入口 + 全局快捷键**：右键一键打开网页版 DeepSeek / DS 服务器状态；可录制系统全局热键，效果等同左键单击托盘图标（打开 DSH 控制台）。
-- **零第三方依赖**：托盘用 .NET Framework 4.8 + C# WinForms，状态引擎是纯 Node 脚本，不装任何 npm 包。
+- **多会话悬停提示**：鼠标移上去，逐个列出所有正在工作的主会话标题（Windows 63 字符硬限；macOS 沿用 60 字符预算，并在菜单顶部显示状态行）。
+- **桌面通知 + 提示音**：任务完成、有操作需要审批时弹 Windows 通知气泡 / macOS 通知中心通知；默认用系统提示音，也可指定自己的音频文件。
+- **充值余额菜单**：右键（macOS 左键）直接显示 DeepSeek 账户充值余额，点击打开官方充值页。
+- **快捷入口 + 全局快捷键**：一键打开网页版 DeepSeek / DS 服务器状态；可录制系统全局热键，效果等同单击托盘图标（打开 DSH 控制台）。
+- **零第三方依赖**：Windows 托盘用 .NET Framework 4.8 + C# WinForms，macOS 托盘用 AppKit / Objective-C，状态引擎是纯 Node 脚本，不装任何 npm 包。
 - **开机自启可选**：一条命令安装 / 卸载，无需管理员权限。
 - **隐私友好**：不联网上报、不写 DSH 数据；账户 token 只在内存里用一次。
 
@@ -64,6 +66,7 @@
 ## 系统要求
 
 - **Windows 10 / 11**（依赖系统自带的 .NET Framework 4.8，无需额外安装）
+- **macOS 11 Big Sur 或更高**（原生 AppKit 菜单栏应用；需要 Xcode Command Line Tools，Intel / Apple Silicon 通用二进制）
 - **Node.js**：DSH 本身已依赖 Node，通常无需另装。状态引擎用 Node 内置的 zstd 解析会话日志；Node 版本过老时仍可显示工作 / 权限状态，只是无法检测「待审批」（会降级提示，不会崩溃）。
 - **无需管理员权限**，无需联网（除可选的余额查询）。
 
@@ -107,9 +110,23 @@ powershell -ExecutionPolicy Bypass -File install-autostart.ps1 -Remove
   - **退出**
 - **左键单击圆点 = 打开控制台**（与全局快捷键相同）；双击也只打开一次（内置 0.6 秒去抖，不会开两个标签页）。
 
+## macOS 菜单栏版
+
+macOS 版是原生 AppKit 菜单栏应用，与 Windows 版共用同一套状态引擎与判定契约（v1–v6）。完整说明见 **[README-macos.md](README-macos.md)**。
+
+```bash
+./build-macos.sh                 # 编译并打包 bin/DSHStatusTray.app（ad-hoc 签名）
+open bin/DSHStatusTray.app       # 运行（首次请允许通知）
+./install-autostart-macos.sh     # 可选：登录时自启
+```
+
+- 左键单击圆点默认弹出菜单（macOS 习惯），右键 / ⌃+左键同样；想要 Windows 的「左键单击打开控制台」，在 `config.json` 里设置 `"openConsoleOnLeftClick": true`。
+- 运行时目录是 `~/Library/Application Support/DSHStatusTray/`（`status.json` / `config.json` / `agent.log` / `tray.log`）。
+- 通知使用 UserNotifications（首次需授权）；未授权时回退 `osascript`。全局快捷键里的 `Win` 在 macOS 上是 `⌘ Command`。
+
 ## 配置
 
-首次运行会自动生成 `%LOCALAPPDATA%\DSHStatusTray\config.json`：
+Windows 首次运行会自动生成 `%LOCALAPPDATA%\DSHStatusTray\config.json`；macOS 生成 `~/Library/Application Support/DSHStatusTray/config.json`（键相同，另有 macOS 专用键）：
 
 ```json
 {
@@ -145,6 +162,7 @@ powershell -ExecutionPolicy Bypass -File install-autostart.ps1 -Remove
 | `topUpUrl` | 点击余额项打开的充值页地址 |
 | `webChatUrl` / `statusUrl` | 「打开网页版 DeepSeek」/「查看 DS 服务器状态」打开的地址 |
 | `hotkey` | 全局快捷键（如 `Ctrl+Alt+F9`；空字符串 = 未设置）。由「设置全局快捷键…」窗口自动写入，也可手改后重启生效 |
+| `openConsoleOnLeftClick` | **仅 macOS**：`true` 时左键单击直接打开控制台（Windows 行为）；默认 `false` 弹菜单。Windows 版忽略该键 |
 
 ## 工作原理
 
@@ -159,6 +177,7 @@ DSHStatusTray.exe  (C# WinForms，托盘 UI)
 
 - 引擎意外退出或卡死时，UI 会自动重启它；找不到 Node 时托底显示灰灯并提示。
 - 运行时文件都在 `%LOCALAPPDATA%\DSHStatusTray\`：`status.json`（状态快照）、`config.json`、`agent.log`（引擎日志）、`tray.log`（托盘异常日志）。
+- macOS 版结构相同，只是 UI 换成 AppKit `NSStatusItem`、运行时目录换成 `~/Library/Application Support/DSHStatusTray/`；详见 [README-macos.md](README-macos.md#工作原理)。
 
 数据来源（均为**只读**）：
 
@@ -169,7 +188,7 @@ DSHStatusTray.exe  (C# WinForms，托盘 UI)
 ## 隐私与安全
 
 - **只读**：不修改 DSH 的任何配置、会话或进程，也不调用 DSH 的内部接口。
-- **token 不落盘**：可选的余额查询会读取本机 DSH 已登录的账户凭证（`%USERPROFILE%\.dsh\.credentials.yaml`）里的 token，但**只在状态引擎进程内存中使用**，不会写入 `status.json`、日志或任何错误信息，也不会发送到 `platform.deepseek.com` 以外的任何地方。
+- **token 不落盘**：可选的余额查询会读取本机 DSH 已登录的账户凭证（Windows `%USERPROFILE%\.dsh\.credentials.yaml`，macOS `~/.dsh/.credentials.yaml`）里的 token，但**只在状态引擎进程内存中使用**，不会写入 `status.json`、日志或任何错误信息，也不会发送到 `platform.deepseek.com` 以外的任何地方。
 - **不收集、不上传**：工具本身没有任何遥测；除余额查询外不发起任何网络请求。
 - 不想联网查余额？把 `showBalance` 设为 `false` 即可完全离线运行。
 
@@ -207,6 +226,8 @@ bin\DSHStatusTray.exe --test-notify completion
 bin\DSHStatusTray.exe --test-notify approval
 ```
 
+macOS 版（`bin/DSHStatusTray.app/Contents/MacOS/DSHStatusTray`）支持同一组验收参数，另有 `--print-menu` / `--show-menu` / `--render-app-icon`，路径与运行时目录不同，详见 [README-macos.md](README-macos.md#命令行与自检)。
+
 ## 常见问题
 
 - **托盘里找不到圆点？** 点任务栏的「显示隐藏的图标」（^），把圆点拖到任务栏；或检查任务管理器里是否有 `DSHStatusTray.exe`。
@@ -226,17 +247,28 @@ bin\DSHStatusTray.exe --test-notify approval
 ```
 dsh-status-tray/
 ├─ src/
-│  ├─ TrayApp.cs                # 托盘 UI（C# 5 / WinForms，单文件）
-│  ├─ app.manifest              # DPI aware
-│  ├─ status-agent.mjs          # 状态引擎（Node，常驻，由 exe 隐藏拉起）
-│  └─ status-core.mjs           # 纯状态计算（可单测）
+│  ├─ TrayApp.cs                # Windows 托盘 UI（C# 5 / WinForms，单文件）
+│  ├─ app.manifest              # Windows DPI aware
+│  ├─ status-agent.mjs          # 状态引擎（Node，跨平台，由托盘隐藏拉起）
+│  ├─ status-core.mjs           # 纯状态计算（可单测）
+│  └─ macos/                    # macOS 菜单栏 UI（AppKit / Objective-C）
+│     ├─ main.m                 # 入口：参数 / 单实例 / 调试模式
+│     ├─ DSHConfig.m            # 路径 / 日志 / config.json / status.json
+│     ├─ DSHAgent.m             # node 定位 + 子进程守护
+│     ├─ DSHIcon.m              # 菜单栏圆点 / 应用图标绘制
+│     ├─ DSHHotkey.m            # 全局快捷键 + 设置窗口
+│     ├─ DSHTray.m              # 菜单栏图标 / 菜单 / 通知 / 轮询
+│     └─ Info.plist             # LSUIElement / bundle id / 版本
 ├─ test/
-│  └─ status.test.mjs           # node --test 单元测试
-├─ dev/                         # 开发辅助脚本（基准、体检、降级验证、文档配图生成）
+│  ├─ status.test.mjs           # node --test 单元测试
+│  └─ platform.test.mjs         # 跨平台运行时目录测试
+├─ dev/                         # 开发辅助脚本（基准、体检、降级验证、文档配图、macOS 验收）
 ├─ docs/                        # 设计契约（v1–v6）与界面示意图
-├─ build.ps1                    # 一键编译（系统自带 csc.exe）
-├─ install-autostart.ps1        # 开机自启安装 / 卸载
-└─ package.json                 # npm test / build 快捷入口
+├─ build.ps1                    # Windows 一键编译（系统自带 csc.exe）
+├─ build-macos.sh               # macOS 一键编译 + 打包 .app + ad-hoc 签名
+├─ install-autostart.ps1        # Windows 开机自启安装 / 卸载
+├─ install-autostart-macos.sh   # macOS LaunchAgent 安装 / 卸载 / 状态
+└─ package.json                 # npm test / build:mac / verify:mac 快捷入口
 ```
 
 ## 开发与测试
@@ -273,9 +305,10 @@ npm run build     # 等价于 powershell -ExecutionPolicy Bypass -File build.ps1
 - 多会话并存时，审批 / 工作中状态取所有近期会话的聚合优先级。
 - 通知去重只在托盘进程内保持：重启托盘后，同一个「已完成」不会重播，但启动时已挂起的审批会再提示一次。
 - 同一时刻多条完成 / 审批事件只提示最新一条（两次完成间隔小于采样周期时可能合并）。
-- Windows 托盘提示有 **63 字符**硬上限，本工具按 60 字符预算排布；会话太多 / 标题太长时会省略并显示 `…等 N 个会话`。
+- Windows 托盘提示有 **63 字符**硬上限，本工具按 60 字符预算排布；会话太多 / 标题太长时会省略并显示 `…等 N 个会话`。macOS 也沿用 60 字符预算（契约一致），更多信息放在菜单顶部状态行。
 - 余额查询依赖本机 DSH 凭证与网络，结果最多缓存约 10 分钟；失败只影响余额显示。
 - 全局快捷键是系统级注册：可能被其它程序的同名热键占用（设置窗口会提示注册失败），在个别全屏游戏 / 远程桌面场景下也可能不生效（Windows 系统限制）。
+- macOS：全屏应用会隐藏菜单栏（系统行为）；通知首次需授权，拒绝后回退「脚本编辑器」通知；应用未公证，拷到别的 Mac 可能需右键打开。详见 [README-macos.md](README-macos.md)。
 
 ## 许可证
 
@@ -292,8 +325,8 @@ npm run build     # 等价于 powershell -ExecutionPolicy Bypass -File build.ps1
 - 🟢 **idle** — DSH is running but has nothing to do
 - ⚪ **offline** — DSH's local web service is not reachable
 
-It also provides multi-session hover tooltips, completion/approval toast notifications with sound, an optional account-balance menu item, quick links to the DeepSeek web app and status page, and a configurable system-wide hotkey that opens the local DSH console (same as left-clicking the tray dot). Zero third-party dependencies: the tray is C# WinForms on .NET Framework 4.8, the status engine is a plain Node script.
+It also provides multi-session hover tooltips, completion/approval notifications with sound, an optional account-balance menu item, quick links to the DeepSeek web app and status page, and a configurable system-wide hotkey that opens the local DSH console (same as clicking the tray dot). Zero third-party dependencies: the Windows tray is C# WinForms on .NET Framework 4.8, the macOS tray is native AppKit / Objective-C, and the status engine is a plain Node script.
 
-Build with `powershell -ExecutionPolicy Bypass -File build.ps1`, then run `bin\DSHStatusTray.exe`. Requires Windows 10/11 and Node.js (already required by DSH). See **[docs/README.md](docs/README.md)** for the design contracts.
+Windows: build with `powershell -ExecutionPolicy Bypass -File build.ps1`, then run `bin\DSHStatusTray.exe`. macOS: `./build-macos.sh`, then `open bin/DSHStatusTray.app` (see **[README-macos.md](README-macos.md)**). Requires Windows 10/11 or macOS 11+, and Node.js (already required by DSH). See **[docs/README.md](docs/README.md)** for the design contracts.
 
 Not an official DeepSeek project. Licensed under MIT.

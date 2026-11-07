@@ -94,10 +94,12 @@ const USAGE = `DSH 状态引擎
                             [--once] [--now <epochMs>]
 
 选项:
-  --out <path>          status.json 输出路径（默认 %LOCALAPPDATA%\\DSHStatusTray\\status.json）
+  --out <path>          status.json 输出路径
+                        （默认 Windows: %LOCALAPPDATA%\\DSHStatusTray\\status.json；
+                          macOS: ~/Library/Application Support/DSHStatusTray/status.json）
   --interval <ms>       轮询/写盘间隔，默认 500（范围 100..600000）
-  --log <path>          错误日志路径（默认 %LOCALAPPDATA%\\DSHStatusTray\\agent.log）
-  --dsh-home <path>     DSH_HOME（默认环境变量 DSH_HOME 或 %USERPROFILE%\\.dsh）
+  --log <path>          错误日志路径（默认与 status.json 同目录的 agent.log）
+  --dsh-home <path>     DSH_HOME（默认环境变量 DSH_HOME 或 ~/.dsh）
   --console-url <url>   控制台地址，用于取端口探活（默认 http://127.0.0.1:3080）
   --once                计算一次，打印完整 status JSON 后退出
   --now <epochMs>       固定判定基准时间（仅 --once 有意义，测试用）
@@ -1250,9 +1252,22 @@ function appendLog(logPath, message) {
 /* CLI                                                                */
 /* ------------------------------------------------------------------ */
 
-function runtimeDir() {
-  const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
-  return path.join(localAppData, 'DSHStatusTray');
+/**
+ * 托盘运行时目录（status.json / config.json / agent.log / tray.log）。
+ * Windows 与托盘 exe 保持一致；macOS 用 ~/Library/Application Support（与 AppKit 侧相同）；
+ * 其他平台回退 XDG_STATE_HOME。
+ * @param {string} [platform] 默认 process.platform，便于单测
+ */
+export function runtimeDir(platform = process.platform) {
+  if (platform === 'win32') {
+    const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    return path.join(localAppData, 'DSHStatusTray');
+  }
+  if (platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'DSHStatusTray');
+  }
+  const stateHome = process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state');
+  return path.join(stateHome, 'DSHStatusTray');
 }
 
 function parseConsoleUrl(consoleUrl) {

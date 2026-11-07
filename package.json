@@ -1,12 +1,17 @@
 {
   "name": "dsh-status-tray",
-  "version": "1.1.0",
-  "description": "Windows system-tray status light for DeepSeek Harness (DSH): see at a glance whether DSH is working, waiting for approval, idle, or offline; with desktop notifications, account balance, quick links, and a global hotkey.",
+  "version": "1.2.0",
+  "description": "System-tray / menu-bar status light for DeepSeek Harness (DSH) on Windows and macOS: see at a glance whether DSH is working, waiting for approval, idle, or offline; with desktop notifications, account balance, quick links, and a global hotkey.",
   "license": "MIT",
   "private": true,
   "scripts": {
     "test": "node --test",
     "build": "powershell -ExecutionPolicy Bypass -File build.ps1",
+    "build:mac": "bash ./build-macos.sh",
+    "start:mac": "open \"bin/DSHStatusTray.app\"",
+    "install-autostart:mac": "bash ./install-autostart-macos.sh",
+    "uninstall-autostart:mac": "bash ./install-autostart-macos.sh --remove",
+    "verify:mac": "bash ./dev/verify-macos.sh",
     "agent:once": "node src/status-agent.mjs --once",
     "agent:once:account": "node src/status-agent.mjs --once --account"
   },
@@ -21,6 +26,10 @@
     "tray",
     "system-tray",
     "winforms",
+    "macos",
+    "menu-bar",
+    "status-bar",
+    "appkit",
     "status-monitor",
     "hotkey"
   ]

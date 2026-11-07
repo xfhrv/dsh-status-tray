@@ -58,10 +58,11 @@ Windows 任务栏托盘常驻小工具，实时反映**本机 DSH**（DeepSeek H
 **约束**：只用系统自带能力，零第三方依赖，不联网下载。
 - C# 用 `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`（**只支持 C# 5**：禁止 `$""` 插值、`?.`、`=>` 表达式体、`nameof`、自动属性初始化等 C# 6+ 语法），引用 `System.dll / System.Core.dll / System.Windows.Forms.dll / System.Drawing.dll`，`/target:winexe /codepage:65001`。
 - Node 用本机 Node（当前 v24.20.0，须兼容 ≥ v22）。zstd 解压用 `node:zlib` 的 `zstdDecompressSync`（做特性检测，缺失时优雅降级：仍按 projcache 出状态，只是没有审批检测，并在 `agentError` 里注明）。
+- macOS 端口复用同一套契约：UI 用 AppKit / Objective-C（系统 `clang` 编译，零第三方依赖），运行时目录为 `~/Library/Application Support/DSHStatusTray/`，其余判定与字段不变。详见 [README-macos.md](../README-macos.md)。
 
 ## 3. 运行时文件（不放在仓库目录）
 
-目录：`%LOCALAPPDATA%\DSHStatusTray\`（C# 用 `Environment.GetFolderPath(LocalApplicationData)`）
+目录：`%LOCALAPPDATA%\DSHStatusTray\`（C# 用 `Environment.GetFolderPath(LocalApplicationData)`）；macOS 为 `~/Library/Application Support/DSHStatusTray/`（`status-agent.mjs` 的 `runtimeDir()` 按平台取值）
 
 | 文件 | 生产者 | 说明 |
 |---|---|---|

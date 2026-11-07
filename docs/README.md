@@ -1,8 +1,8 @@
 # DSH 状态托盘 — 文档索引
 
-本目录收录 DSH 状态托盘（Windows 任务栏托盘状态灯）的设计与实现契约。文档按版本增量演进：**v1 [status-schema.md](status-schema.md) → v2 [alerts-spec.md](alerts-spec.md) → v3 [account-balance-spec.md](account-balance-spec.md) → v4 [working-sessions-spec.md](working-sessions-spec.md) → v5 [state-model-v5.md](state-model-v5.md) → v6 [menu-hotkey-v6.md](menu-hotkey-v6.md)**，即 v1 定义状态判定、数据源、`status.json`、`config.json`、菜单与进程模型，v2 增加任务完成/审批通知与提示音，v3 增加充值余额菜单，v4 增加多会话悬停提示，v5 将状态模型简化为四态并精简右键菜单，v6 扩展右键菜单（网页版 DeepSeek / DS 服务器状态 / 设置全局快捷键）并新增全局热键与左键单击行为；后一版本在前一版本之上增量生效，冲突处以版本更高者为准，当前最新为 v6（`status.json` 结构仍为 v5）。
+本目录收录 DSH 状态托盘（Windows 任务栏 / macOS 菜单栏状态灯）的设计与实现契约。文档按版本增量演进：**v1 [status-schema.md](status-schema.md) → v2 [alerts-spec.md](alerts-spec.md) → v3 [account-balance-spec.md](account-balance-spec.md) → v4 [working-sessions-spec.md](working-sessions-spec.md) → v5 [state-model-v5.md](state-model-v5.md) → v6 [menu-hotkey-v6.md](menu-hotkey-v6.md)**，即 v1 定义状态判定、数据源、`status.json`、`config.json`、菜单与进程模型，v2 增加任务完成/审批通知与提示音，v3 增加充值余额菜单，v4 增加多会话悬停提示，v5 将状态模型简化为四态并精简右键菜单，v6 扩展右键菜单（网页版 DeepSeek / DS 服务器状态 / 设置全局快捷键）并新增全局热键与左键单击行为；后一版本在前一版本之上增量生效，冲突处以版本更高者为准，当前最新为 v6（`status.json` 结构仍为 v5）。
 
-安装、使用与配置说明见仓库根目录的 `README.md`。
+安装、使用与配置说明见仓库根目录的 `README.md`；macOS 的构建、平台差异与限制见 [README-macos.md](../README-macos.md)（复用本目录的 v1–v6 契约，只替换 UI 层）。
 
 ## 文档导航
 
